@@ -5,6 +5,7 @@ from PIL import Image
 import io
 import google.generativeai as genai
 import os
+import urllib.request
 
 # Konfigurasi halaman
 st.set_page_config(
@@ -23,8 +24,16 @@ if GEMINI_API_KEY:
 def load_model():
     """Load trained corrosion detection model"""
     try:
-        # Sesuaikan path dengan lokasi model Anda
+        model_url = "https://www.dropbox.com/scl/fi/y1vur4zdwhlik4pw2r73s/saved_model.keras?dl=1"
         model_path = "saved_model.keras"
+        
+        # Download model jika belum ada
+        if not os.path.exists(model_path):
+            st.info("📥 Downloading model from Dropbox...")
+            urllib.request.urlretrieve(model_url, model_path)
+            st.success("✅ Model downloaded successfully!")
+        
+        # Load model
         model = tf.keras.models.load_model(model_path)
         return model
     except Exception as e:
