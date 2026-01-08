@@ -27,17 +27,38 @@ def load_model():
         model_url = "https://www.dropbox.com/scl/fi/y1vur4zdwhlik4pw2r73s/saved_model.keras?dl=1"
         model_path = "saved_model.keras"
         
-        # Download model jika belum ada
-        if not os.path.exists(model_path):
+        # Download model jika belum ada atau file corrupt
+        if not os.path.exists(model_path) or os.path.getsize(model_path) < 1000:
             st.info("📥 Downloading model from Dropbox...")
-            urllib.request.urlretrieve(model_url, model_path)
-            st.success("✅ Model downloaded successfully!")
+            
+            # Hapus file lama jika ada
+            if os.path.exists(model_path):
+                os.remove(model_path)
+            
+            # Download dengan error handling
+            try:
+                urllib.request.urlretrieve(model_url, model_path)
+                st.success("✅ Model downloaded successfully!")
+            except Exception as download_error:
+                st.error(f"❌ Error downloading model: {download_error}")
+                return None
+        
+        # Validasi file sebelum load
+        if not os.path.exists(model_path):
+            st.error("❌ File model tidak ditemukan setelah download.")
+            return None
+        
+        file_size = os.path.getsize(model_path)
+        st.info(f"📊 Model file size: {file_size / (1024*1024):.2f} MB")
         
         # Load model
         model = tf.keras.models.load_model(model_path)
+        st.success("✅ Model loaded successfully!")
         return model
+        
     except Exception as e:
-        st.error(f"Error loading model: {e}")
+        st.error(f"❌ Error loading model: {e}")
+        st.info("💡 Tips:\n- Pastikan link Dropbox valid dan dapat diakses\n- Coba hapus file 'saved_model.keras' dan refresh aplikasi\n- Periksa koneksi internet Anda")
         return None
 
 def preprocess_image(image):
