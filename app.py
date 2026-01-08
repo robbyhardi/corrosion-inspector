@@ -5,7 +5,7 @@ from PIL import Image
 import io
 import google.generativeai as genai
 import os
-import urllib.request
+import requests  # Ganti urllib dengan requests
 
 # Konfigurasi halaman
 st.set_page_config(
@@ -27,38 +27,61 @@ def load_model():
         model_url = "https://www.dropbox.com/scl/fi/y1vur4zdwhlik4pw2r73s/saved_model.keras?dl=1"
         model_path = "saved_model.keras"
         
-        # Download model jika belum ada atau file corrupt
-        if not os.path.exists(model_path) or os.path.getsize(model_path) < 1000:
+        # Download model jika belum ada atau file terlalu kecil
+        if not os.path.exists(model_path) or os.path.getsize(model_path) < 10_000_000:  # Minimal 10 MB
             st.info("📥 Downloading model from Dropbox...")
             
             # Hapus file lama jika ada
             if os.path.exists(model_path):
                 os.remove(model_path)
             
-            # Download dengan error handling
+            # Download dengan requests (support redirect)
             try:
-                urllib.request.urlretrieve(model_url, model_path)
-                st.success("✅ Model downloaded successfully!")
+                response = requests.get(model_url, allow_redirects=True, stream=True)
+                response.raise_for_status()
+                
+                # Ambil total size dari header
+                total_size = int(response.headers.get('content-length', 0))
+                
+                # Download dengan progress
+                with open(model_path, 'wb') as f:
+                    if total_size == 0:
+                        f.write(response.content)
+                    else:
+                        downloaded = 0
+                        progress_bar = st.progress(0)
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
+                                downloaded += len(chunk)
+                                progress = int((downloaded / total_size) * 100)
+                                progress_bar.progress(progress, text=f"Downloading: {progress}%")
+                        progress_bar.empty()
+                
+                file_size = os.path.getsize(model_path)
+                st.success(f"✅ Model downloaded! Size: {file_size / (1024*1024):.2f} MB")
+                
+                # Validasi ukuran file
+                if file_size < 10_000_000:
+                    st.error(f"❌ File terlalu kecil ({file_size / (1024*1024):.2f} MB)! Download mungkin gagal.")
+                    os.remove(model_path)
+                    return None
+                    
             except Exception as download_error:
                 st.error(f"❌ Error downloading model: {download_error}")
+                if os.path.exists(model_path):
+                    os.remove(model_path)
                 return None
         
-        # Validasi file sebelum load
-        if not os.path.exists(model_path):
-            st.error("❌ File model tidak ditemukan setelah download.")
-            return None
-        
-        file_size = os.path.getsize(model_path)
-        st.info(f"📊 Model file size: {file_size / (1024*1024):.2f} MB")
-        
         # Load model
+        st.info("🔄 Loading model...")
         model = tf.keras.models.load_model(model_path)
         st.success("✅ Model loaded successfully!")
         return model
         
     except Exception as e:
         st.error(f"❌ Error loading model: {e}")
-        st.info("💡 Tips:\n- Pastikan link Dropbox valid dan dapat diakses\n- Coba hapus file 'saved_model.keras' dan refresh aplikasi\n- Periksa koneksi internet Anda")
+        st.info("💡 Tips:\n- Pastikan link Dropbox valid\n- Coba hapus file 'saved_model.keras' dan refresh\n- Periksa koneksi internet")
         return None
 
 def preprocess_image(image):
